@@ -10,6 +10,8 @@ import java.util.regex.Pattern;
 import android.app.ListActivity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.SharedPreferences.Editor;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
@@ -20,20 +22,26 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.SearchView;
-import android.widget.Toast;
 import android.widget.SearchView.OnQueryTextListener;
 import android.widget.TextView;
+import android.widget.Toast;
 
-public class MainActivity extends ListActivity {
+public class MainActivity extends ListActivity implements OnItemClickListener {
     private static final String TAG = "MainActivity";
+    
+    private static final int MAX_DISPLAY_ITEM = 20; // 最大结果集，显示过多结果没有意义
+    
+    private static final String SP_KEY_SEARCH_INDEX = "search_index";
+    private SharedPreferences sp;
 
-    private List<PackageInfo> packageInfoList;
+    private List<PackageInfo> packageInfoList; // 所有包信息
     private PackageManager pm;
 
     private ListView listView;
@@ -42,18 +50,20 @@ public class MainActivity extends ListActivity {
     private SearchView mSearchView;
     private String searchIndex = null;
 
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
         pm = getPackageManager();
-        Log.i(TAG, "t");
         packageInfoList = getOrderedPackageInfoList(pm);
-        Log.i(TAG, "t");
+        sp = getPreferences(Context.MODE_PRIVATE);
 
         initView();
-        onRefresh();
+        onRefresh(packageInfoList);
+        
+        searchIndex = restoreCacheSearchIndex(); // 先从缓存中读取索引, 然后刷新索引
         new SearchIndexTask().execute();
         
         /*
@@ -67,49 +77,64 @@ public class MainActivity extends ListActivity {
         }
         */
     }
+    
+    private String restoreCacheSearchIndex() {
+        return sp.getString(SP_KEY_SEARCH_INDEX, null);
+    }
+    
+    private void storeSearchIndex(String searchIndex) {
+        Editor editor = sp.edit();
+        editor.putString(SP_KEY_SEARCH_INDEX, searchIndex);
+        editor.commit();
+    }
 
     private void initView() {
         listView = getListView();
         listAdapter = new ListAdapter(this);
         listView.setAdapter(listAdapter);
+        listView.setOnItemClickListener(this);
         
         getActionBar();
     }
 
-    public void onRefresh() {
-        listAdapter.refresh(packageInfoList.subList(0, 20));
-        listView.setOnItemClickListener(new OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> arg0, View arg1,
-                    int position, long id) {
-                PackageInfo item = (PackageInfo) listAdapter.getItem(position);
+    public void onRefresh(List<PackageInfo> packageInfoList) {
+        listAdapter.refresh(
+                (packageInfoList.size() > MAX_DISPLAY_ITEM)
+                ? packageInfoList.subList(0, MAX_DISPLAY_ITEM)
+                : packageInfoList
+        );
+    }
+    
+    @Override
+    public void onItemClick(AdapterView<?> arg0, View arg1,
+            int position, long id) {
+        PackageInfo item = (PackageInfo) listAdapter.getItem(position);
 
-                Intent intent = pm.getLaunchIntentForPackage(item.packageName);
-                startActivity(intent);
-                finish();
-            }
-        });
+        Intent intent = pm.getLaunchIntentForPackage(item.packageName);
+        startActivity(intent);
+        finish();
     }
     
     private class SearchIndexTask extends AsyncTask<Void, Void, String> {
         
         @Override
         protected String doInBackground(Void... params) {
-            return createSearchIndex(packageInfoList, pm);
+            String searchIndex = createSearchIndex(packageInfoList, pm);
+            storeSearchIndex(searchIndex); // cache it
+            return searchIndex;
         }
         
         @Override
         protected void onPostExecute(String result) {
             super.onPostExecute(result);
             searchIndex = result;
-            Toast.makeText(getApplicationContext(), "创建索引成功!", Toast.LENGTH_SHORT).show();
+            //Toast.makeText(getApplicationContext(), getString(R.string.create_search_index_successed), Toast.LENGTH_SHORT).show();
         }
     }
 
     // 创建搜索索引
     private String createSearchIndex(List<PackageInfo> packageInfoList, 
             PackageManager pm) {
-        Log.i(TAG, "i");
         StringBuilder sb = new StringBuilder();
         for (int i = 0, l = packageInfoList.size(); i < l; i++) {
             PackageInfo info = packageInfoList.get(i);
@@ -132,27 +157,31 @@ public class MainActivity extends ListActivity {
             sb.append(i);
             sb.append("#");
             
-            // #pingyin@i#
+            // #pinyin@i#
             sb.append("#");
             sb.append(Utils.toPinyin(appLabel));
             sb.append("@");
             sb.append(i);
             sb.append("#");
         }
-        return sb.toString();
+        return sb.toString().toLowerCase();
     }
     
-    // 搜索，并将结果显示到UI
+    /**
+     * 搜索关键词，并将结果显示到UI
+     * 
+     * @param input 关键词， 大小写不敏感
+     * @return 是否至少找到一个结果
+     */
     private boolean search(String input) {
         Log.i(TAG, "search for " + input);
         if (searchIndex == null) {
-            Toast.makeText(getApplicationContext(), "正在创建索引，请稍候", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getApplicationContext(), getString(R.string.create_search_index_doing), Toast.LENGTH_SHORT).show();
             return false;
         }
         
         List<PackageInfo> resultList = new ArrayList<PackageInfo>();
-        
-        Pattern pattern=Pattern.compile("#([^#]*" + input + "[^#]*)#");  
+        Pattern pattern=Pattern.compile("#([^#]*" + input.toLowerCase() + "[^#]*)#");  
         Matcher matcher = pattern.matcher(searchIndex);  
         while (matcher.find()) {  
             String m = matcher.group(1); // TODO
@@ -168,27 +197,27 @@ public class MainActivity extends ListActivity {
                 }
             }
         }
-        listAdapter.refresh(resultList);
+        
+        onRefresh(resultList);
         return (resultList.size() > 0);
     }
 
     // 排序
     private List<PackageInfo> getOrderedPackageInfoList(PackageManager pm) {
         List<PackageInfo> packageInfoList = pm.getInstalledPackages(0);
-        Collections.sort(packageInfoList, new ComparatorPackage()); // sort by
-                                                                    // time
+        Collections.sort(packageInfoList, new ComparatorPackage()); // sort by time
         return packageInfoList;
     }
 
     public class ComparatorPackage implements Comparator<PackageInfo> {
 
         public int compare(PackageInfo arg0, PackageInfo arg1) {
-                if (arg1.firstInstallTime > arg0.firstInstallTime)
-                    return 1;
-                else if (arg1.firstInstallTime < arg0.firstInstallTime)
-                    return -1;
-                else
-                    return 0;
+            if (arg1.firstInstallTime > arg0.firstInstallTime)
+                return 1;
+            else if (arg1.firstInstallTime < arg0.firstInstallTime)
+                return -1;
+            else
+                return 0;
         }
     }
     
@@ -198,16 +227,17 @@ public class MainActivity extends ListActivity {
         mSearchView = (SearchView) menu.findItem(R.id.search).getActionView();
         mSearchView.setIconifiedByDefault(false);
         mSearchView.requestFocus();
+        mSearchView.setQueryHint(getString(R.string.search_hit));
+        mSearchView.setImeOptions(EditorInfo.IME_ACTION_GO);
         setupSearchView();
         return true;
     }
 
     private void setupSearchView() {
         mSearchView.setOnQueryTextListener(new OnQueryTextListener() {
-            
             @Override
             public boolean onQueryTextSubmit(String query) {
-                return search(query);
+                return openTheFirstItem(query);
             }
             
             @Override
@@ -215,6 +245,14 @@ public class MainActivity extends ListActivity {
                 return search(newText);
             }
         });
+    }
+    
+    private boolean openTheFirstItem(String query) {
+        if (listAdapter.getCount() > 0) {
+            onItemClick(null, null, 0 /* firstItem */, 0);
+            return true;
+        }
+        return false;
     }
 
     /**

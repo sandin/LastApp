@@ -1,9 +1,13 @@
 <resources>
 
-    <string name="app_name">LastApp</string>
+    <string name="app_name">应用搜索</string>
     <string name="hello_world">Hello world!</string>
     <string name="menu_settings">Settings</string>
-    <string name="title_activity_main">最新应用</string>
+    
+    <string name="title_activity_main">应用搜索</string>
     <string name="search">搜索</string>
+    <string name="create_search_index_successed">创建索引成功!</string>
+    <string name="create_search_index_doing">正在创建索引，请稍候!</string>
+    <string name="search_hit">搜索应用</string>
 
 </resources>
