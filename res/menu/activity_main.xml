@@ -1,6 +1,16 @@
-<menu xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:id="@+id/menu_settings"
-        android:title="@string/menu_settings"
+<menu xmlns:android="http://schemas.android.com/apk/res/android" >
+
+    <item
+        android:id="@+id/menu_settings"
         android:orderInCategory="100"
-        android:showAsAction="never" />
+        android:showAsAction="never"
+        android:title="@string/menu_settings"/>
+    <item
+        android:id="@+id/search"
+        android:actionViewClass="android.widget.SearchView"
+        android:icon="@android:drawable/ic_search_category_default"
+        android:showAsAction="ifRoom|withText"
+        android:title="@string/search">
+    </item>
+
 </menu>
