@@ -1,8 +1,6 @@
 package com.lds.lastapp;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -33,6 +31,9 @@ import android.widget.SearchView.OnQueryTextListener;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.lds.lastapp.db.LastAppDatabase;
+import com.lds.lastapp.model.AppInfo;
+
 public class MainActivity extends ListActivity implements OnItemClickListener {
     private static final String TAG = "MainActivity";
     
@@ -41,7 +42,7 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
     private static final String SP_KEY_SEARCH_INDEX = "search_index";
     private SharedPreferences sp;
 
-    private List<PackageInfo> packageInfoList; // 所有包信息
+    private List<AppInfo> appInfoList; // 所有包信息
     private PackageManager pm;
 
     private ListView listView;
@@ -50,32 +51,23 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
     private SearchView mSearchView;
     private String searchIndex = null;
 
+    private SearchIndexTask searchIndexTask;
+    private GetAppInfoTask getAppInfoTask;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        initView();
 
         pm = getPackageManager();
-        packageInfoList = getOrderedPackageInfoList(pm);
         sp = getPreferences(Context.MODE_PRIVATE);
+        
+        getAppInfoTask = new GetAppInfoTask();
+        getAppInfoTask.execute();
 
-        initView();
-        onRefresh(packageInfoList);
-        
-        searchIndex = restoreCacheSearchIndex(); // 先从缓存中读取索引, 然后刷新索引
-        new SearchIndexTask().execute();
-        
-        /*
-        ActivityManager m = (ActivityManager)this.getSystemService(ACTIVITY_SERVICE);
-        List<RecentTaskInfo> recentTaskInfoList = m.getRecentTasks(50,0);
-        for (RecentTaskInfo info : recentTaskInfoList) {
-            if (info.origActivity != null ) {
-                Log.i(TAG, "info : " + info.origActivity.getPackageName());
-            }
-            Log.i(TAG, "intent: " + info.baseIntent.toString());
-        }
-        */
+        searchIndexTask = new SearchIndexTask();
+        searchIndexTask.execute();
     }
     
     private String restoreCacheSearchIndex() {
@@ -97,7 +89,7 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
         getActionBar();
     }
 
-    public void onRefresh(List<PackageInfo> packageInfoList) {
+    public void onRefresh(List<AppInfo> packageInfoList) {
         listAdapter.refresh(
                 (packageInfoList.size() > MAX_DISPLAY_ITEM)
                 ? packageInfoList.subList(0, MAX_DISPLAY_ITEM)
@@ -108,38 +100,76 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
     @Override
     public void onItemClick(AdapterView<?> arg0, View arg1,
             int position, long id) {
-        PackageInfo item = (PackageInfo) listAdapter.getItem(position);
+        final AppInfo item = (AppInfo) listAdapter.getItem(position);
+        if (item == null) {
+            return;
+        }
+        
+        // 累计运行次数
+        new Thread() {
+            public void run() {
+                LastAppDatabase database = LastAppDatabase.getInstance(getApplicationContext());
+                database.updateRunCount(item);
+            };
+        }.start();
 
         Intent intent = pm.getLaunchIntentForPackage(item.packageName);
         startActivity(intent);
         finish();
     }
     
+    // TODO: 是否每次都需要刷新索引?
     private class SearchIndexTask extends AsyncTask<Void, Void, String> {
         
         @Override
+        protected void onPreExecute() {
+            searchIndex = restoreCacheSearchIndex(); // 先使用缓存
+        }
+        
+        @Override
         protected String doInBackground(Void... params) {
-            String searchIndex = createSearchIndex(packageInfoList, pm);
-            storeSearchIndex(searchIndex); // cache it
-            return searchIndex;
+            if (appInfoList != null) {
+                String searchIndex = createSearchIndex(appInfoList, pm);
+                storeSearchIndex(searchIndex); // cache it
+                return searchIndex;
+            }
+            return null;
         }
         
         @Override
         protected void onPostExecute(String result) {
             super.onPostExecute(result);
-            searchIndex = result;
+            if (result != null) {
+                searchIndex = result;
+            }
             //Toast.makeText(getApplicationContext(), getString(R.string.create_search_index_successed), Toast.LENGTH_SHORT).show();
         }
     }
 
     // 创建搜索索引
-    private String createSearchIndex(List<PackageInfo> packageInfoList, 
+    private String createSearchIndex(List<AppInfo> packageInfoList, 
             PackageManager pm) {
         StringBuilder sb = new StringBuilder();
+        StringBuilder sb2 = new StringBuilder();
+        StringBuilder sb3 = new StringBuilder();
         for (int i = 0, l = packageInfoList.size(); i < l; i++) {
-            PackageInfo info = packageInfoList.get(i);
+            AppInfo info = packageInfoList.get(i);
             //Log.i(TAG, info.packageName); 
             //Log.i(TAG, pm.getApplicationLabel(info.applicationInfo) + "");
+            
+            // #name@i#
+            sb.append("#");
+            sb.append(info.applicationLabel);
+            sb.append("@");
+            sb.append(i);
+            sb.append("#");
+            
+            // #pinyin@i#
+            sb.append("#");
+            sb.append(info.getApplicationLabelPinYin());
+            sb.append("@");
+            sb.append(i);
+            sb.append("#");
             
             // #package@i#
             sb.append("#");
@@ -147,23 +177,8 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
             sb.append("@");
             sb.append(i);
             sb.append("#");
-            
-            String appLabel = pm.getApplicationLabel(info.applicationInfo).toString();
-            
-            // #name@i#
-            sb.append("#");
-            sb.append(appLabel);
-            sb.append("@");
-            sb.append(i);
-            sb.append("#");
-            
-            // #pinyin@i#
-            sb.append("#");
-            sb.append(Utils.toPinyin(appLabel));
-            sb.append("@");
-            sb.append(i);
-            sb.append("#");
         }
+        //sb.append(sb2).append(sb3); // 确保拼音的排在英文和中文之后
         return sb.toString().toLowerCase();
     }
     
@@ -179,8 +194,11 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
             Toast.makeText(getApplicationContext(), getString(R.string.create_search_index_doing), Toast.LENGTH_SHORT).show();
             return false;
         }
+        if (appInfoList == null) {
+            return false;
+        }
         
-        List<PackageInfo> resultList = new ArrayList<PackageInfo>();
+        List<AppInfo> resultList = new ArrayList<AppInfo>();
         Pattern pattern=Pattern.compile("#([^#]*" + input.toLowerCase() + "[^#]*)#");  
         Matcher matcher = pattern.matcher(searchIndex);  
         while (matcher.find()) {  
@@ -188,9 +206,9 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
             String[] tmp = m.split("@");
             if (tmp.length == 2) {
                 int index = Integer.parseInt(tmp[1]);
-                if (index >= 0 && index < packageInfoList.size()) {
-                    PackageInfo item = packageInfoList.get(index);
-                    Log.i(TAG, "found: " + pm.getApplicationLabel(item.applicationInfo));
+                if (index >= 0 && index < appInfoList.size()) {
+                    AppInfo item = appInfoList.get(index);
+                    Log.i(TAG, "found: " + item.applicationLabel);
                     if (! resultList.contains(item)) { // 去除重复项
                         resultList.add(item);
                     }
@@ -201,26 +219,54 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
         onRefresh(resultList);
         return (resultList.size() > 0);
     }
+    
+    private class GetAppInfoTask extends AsyncTask<Void, Integer, List<AppInfo>> {
+        private static final int GET_CACHE = 1;
+        private static final int GET_REALTIME = 2;
+        
+        private List<AppInfo> list;
 
-    // 排序
-    private List<PackageInfo> getOrderedPackageInfoList(PackageManager pm) {
-        List<PackageInfo> packageInfoList = pm.getInstalledPackages(0);
-        Collections.sort(packageInfoList, new ComparatorPackage()); // sort by time
-        return packageInfoList;
-    }
-
-    public class ComparatorPackage implements Comparator<PackageInfo> {
-
-        public int compare(PackageInfo arg0, PackageInfo arg1) {
-            if (arg1.firstInstallTime > arg0.firstInstallTime)
-                return 1;
-            else if (arg1.firstInstallTime < arg0.firstInstallTime)
-                return -1;
-            else
-                return 0;
+        @Override
+        protected List<AppInfo> doInBackground(Void... params) {
+            LastAppDatabase database = LastAppDatabase.getInstance(getApplicationContext());
+            
+            list = database.getAllAppInfo(getApplicationContext());
+            this.publishProgress(GET_CACHE);
+            
+            List<PackageInfo> packageInfoList = pm.getInstalledPackages(0);
+            database.saveAppInfoList(getApplicationContext(), packageInfoList, pm);
+            
+            list = database.getAllAppInfo(getApplicationContext());
+            this.publishProgress(GET_REALTIME);
+                
+            return list;
+        }
+        
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            super.onProgressUpdate(values);
+            
+            switch (values[0]) {
+            case GET_CACHE:
+                appInfoList = list;
+                onRefresh(appInfoList);
+            case GET_REALTIME:
+                if (! appInfoList.equals(list)) {
+                    appInfoList = list;
+                    onRefresh(appInfoList);
+                }
+            }
+        }
+        
+        @Override
+        protected void onPostExecute(List<AppInfo> result) {
+            super.onPostExecute(result);
+            
+            //appInfoList = result;
+            //onRefresh(appInfoList);
         }
     }
-    
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.activity_main, menu);
@@ -259,13 +305,13 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
      * Adapter for The list
      */
     class ListAdapter extends BaseAdapter {
-        private List<PackageInfo> list;
+        private List<AppInfo> list;
 
         public ListAdapter(Context context) {
-            list = new ArrayList<PackageInfo>();
+            list = new ArrayList<AppInfo>();
         }
 
-        public void refresh(List<PackageInfo> list) {
+        public void refresh(List<AppInfo> list) {
             this.list.clear();
             this.list.addAll(list);
             notifyDataSetChanged();
@@ -299,9 +345,9 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
                 view = convertView;
             }
 
-            PackageInfo item = list.get(position);
+            AppInfo item = list.get(position);
             Holder holder = (Holder) view.getTag();
-            holder.text.setText(pm.getApplicationLabel(item.applicationInfo));
+            holder.text.setText(item.getApplicationLabel());
             try {
                 Drawable drawable = pm.getApplicationIcon(item.packageName);
                 holder.icon.setImageDrawable(drawable);
