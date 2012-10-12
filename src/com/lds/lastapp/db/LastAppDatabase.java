@@ -136,24 +136,37 @@ public class LastAppDatabase {
         }
     }
     
-    public boolean updateAppInfo(long id, ContentValues values) {
+    public boolean saveOrUpdateHistory(String packageName) {
         SQLiteDatabase db = getDb(true);
         
-        db.query(HISTORY_TABLE_NAME,
+        Cursor c = db.query(HISTORY_TABLE_NAME,
                 new String[] {HistoryColumns.KEY_RUN_COUNT, HistoryColumns.KEY_WEIGHT},
-                selection, selectionArgs, groupBy, having, orderBy)
+                HistoryColumns.KEY_PACKAGE_NAME + " = ?",
+                new String[] { packageName }, null, null, null);
         
-        int count = db.update(HISTORY_TABLE_NAME, values, AppColumns._ID + "=" + id, null);
-        // TODO: saveOrUpdate
-        db.close();
-        return count > 0;
-    }
-    
-    public boolean updateRunCount(AppInfo bean) {
         ContentValues values = new ContentValues();
-        values.put(HistoryColumns.KEY_RUN_COUNT, bean.getRunCount() + 1);
-        values.put(HistoryColumns.KEY_WEIGHT, bean.getWeight() + 1); // 运行次数越多权值越大
-        return updateAppInfo(bean.getId(), values);
+        long result = 0;
+        if (c.moveToNext()) { // update
+            Log.v(TAG, "Update history for package: " + packageName);
+            int runCount = c.getInt(c.getColumnIndex(HistoryColumns.KEY_RUN_COUNT));
+            int weight = c.getInt(c.getColumnIndex(HistoryColumns.KEY_WEIGHT));
+            values.put(HistoryColumns.KEY_RUN_COUNT, runCount+1);
+            values.put(HistoryColumns.KEY_WEIGHT, weight+1);
+            result = db.update(HISTORY_TABLE_NAME, values,
+                    HistoryColumns.KEY_PACKAGE_NAME + "=?",
+                    new String[] {packageName} );
+        } else { // save
+            Log.v(TAG, "Save history for package: " + packageName);
+            values.put(HistoryColumns.KEY_FIXED, false);
+            values.put(HistoryColumns.KEY_LAST_RUN_TIME, System.currentTimeMillis());
+            values.put(HistoryColumns.KEY_PACKAGE_NAME, packageName);
+            values.put(HistoryColumns.KEY_RUN_COUNT, 1);
+            values.put(HistoryColumns.KEY_WEIGHT, 1);
+            result = db.insert(HISTORY_TABLE_NAME, null, values);
+        }
+        c.close();
+        db.close();
+        return result > 0;
     }
     
     public List<AppInfo> getAllAppInfo(Context context) {

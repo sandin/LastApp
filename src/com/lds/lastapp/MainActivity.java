@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import android.app.ActionBar;
 import android.app.ListActivity;
 import android.content.Context;
 import android.content.Intent;
@@ -18,6 +19,8 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
+import android.view.MenuItem;
+import android.view.MenuItem.OnMenuItemClickListener;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
@@ -63,11 +66,7 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
         pm = getPackageManager();
         sp = getPreferences(Context.MODE_PRIVATE);
         
-        getAppInfoTask = new GetAppInfoTask();
-        getAppInfoTask.execute();
-
-        searchIndexTask = new SearchIndexTask();
-        searchIndexTask.execute();
+        onRefresh();
     }
     
     private String restoreCacheSearchIndex() {
@@ -79,6 +78,8 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
         editor.putString(SP_KEY_SEARCH_INDEX, searchIndex);
         editor.commit();
     }
+    
+    private ActionBar actionBar;
 
     private void initView() {
         listView = getListView();
@@ -86,10 +87,21 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
         listView.setAdapter(listAdapter);
         listView.setOnItemClickListener(this);
         
-        getActionBar();
+        actionBar = getActionBar();
+        actionBar.setDisplayOptions(ActionBar.DISPLAY_SHOW_TITLE);
+    }
+    
+    public void onRefresh() {
+        TaskUtils.cancelTaskInterrupt(getAppInfoTask);
+        getAppInfoTask = new GetAppInfoTask();
+        getAppInfoTask.execute();
+
+        TaskUtils.cancelTaskInterrupt(searchIndexTask);
+        searchIndexTask = new SearchIndexTask();
+        searchIndexTask.execute();
     }
 
-    public void onRefresh(List<AppInfo> packageInfoList) {
+    private void refreshView(List<AppInfo> packageInfoList) {
         listAdapter.refresh(
                 (packageInfoList.size() > MAX_DISPLAY_ITEM)
                 ? packageInfoList.subList(0, MAX_DISPLAY_ITEM)
@@ -109,7 +121,7 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
         new Thread() {
             public void run() {
                 LastAppDatabase database = LastAppDatabase.getInstance(getApplicationContext());
-                database.updateRunCount(item);
+                database.saveOrUpdateHistory(item.packageName);
             };
         }.start();
 
@@ -216,7 +228,7 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
             }
         }
         
-        onRefresh(resultList);
+        refreshView(resultList);
         return (resultList.size() > 0);
     }
     
@@ -249,11 +261,11 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
             switch (values[0]) {
             case GET_CACHE:
                 appInfoList = list;
-                onRefresh(appInfoList);
+                refreshView(appInfoList);
             case GET_REALTIME:
                 if (! appInfoList.equals(list)) {
                     appInfoList = list;
-                    onRefresh(appInfoList);
+                    refreshView(appInfoList);
                 }
             }
         }
@@ -270,12 +282,21 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.activity_main, menu);
+        
         mSearchView = (SearchView) menu.findItem(R.id.search).getActionView();
         mSearchView.setIconifiedByDefault(false);
         mSearchView.requestFocus();
         mSearchView.setQueryHint(getString(R.string.search_hit));
         mSearchView.setImeOptions(EditorInfo.IME_ACTION_GO);
         setupSearchView();
+        
+        menu.findItem(R.id.menu_refresh).setOnMenuItemClickListener(new OnMenuItemClickListener() {
+            @Override
+            public boolean onMenuItemClick(MenuItem item) {
+                onRefresh();
+                return false;
+            }
+        });
         return true;
     }
 
