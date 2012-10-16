@@ -127,7 +127,12 @@ public class LastAppDatabase {
                 //v.put(AppColumns.KEY_WEIGHT, false);
                 //v.put(AppColumns.KEY_RUN_COUNT, 0);
                 //v.put(AppColumns.KEY_WEIGHT, 0);
-                db.insert(APP_TABLE_NAME, null, v);
+                long rowId = db.insert(APP_TABLE_NAME, null, v);
+                if (rowId > 0) {
+                    //Log.d(TAG, "insert the appInfo: " + item.toString());
+                } else {
+                    Log.e(TAG, "insert fail. " + item.toString());
+                }
             }
             //db.setTransactionSuccessful();
         } catch (Exception e) {
@@ -169,35 +174,30 @@ public class LastAppDatabase {
         return result > 0;
     }
     
+    private static final String SQL_GET_ALL_APP_INFO = "SELECT "
+                    + "  a." + AppColumns._ID
+                    + ", a." + AppColumns.KEY_APPLICATION_LABEL
+                    + ", a." + AppColumns.KEY_APPLICATION_LABEL_PINYIN
+                    + ", a." + AppColumns.KEY_FIRST_INSTALL_TIME
+                    + ", a." + AppColumns.KEY_LAST_UPDATE_TIME
+                    + ", a." + AppColumns.KEY_PACKAGE_NAME
+                    + ", h." + HistoryColumns.KEY_FIXED
+                    + ", h." + HistoryColumns.KEY_LAST_RUN_TIME
+                    + ", h." + HistoryColumns.KEY_RUN_COUNT
+                    + ", h." + HistoryColumns.KEY_WEIGHT
+                    + " FROM " + APP_TABLE_NAME + " AS a"
+                    + " LEFT JOIN " + HISTORY_TABLE_NAME + " AS h "
+                    + " ON a."+ AppColumns.KEY_PACKAGE_NAME + "="
+                    + "h."+HistoryColumns.KEY_PACKAGE_NAME
+                    + " ORDER BY " 
+                    + "h."+HistoryColumns.KEY_WEIGHT + " DESC, "
+                    + "a."+AppColumns.KEY_FIRST_INSTALL_TIME + " DESC ";
+    
     public List<AppInfo> getAllAppInfo(Context context) {
         List<AppInfo> list = new ArrayList<AppInfo>();
         SQLiteDatabase db = getDb(false);
-        String sql = "SELECT "
-                + " a." + AppColumns._ID
-                + ", a." + AppColumns.KEY_APPLICATION_LABEL
-                + ", a." + AppColumns.KEY_APPLICATION_LABEL_PINYIN
-                + ", a." + AppColumns.KEY_FIRST_INSTALL_TIME
-                + ", a." + AppColumns.KEY_LAST_UPDATE_TIME
-                + ", a." + AppColumns.KEY_PACKAGE_NAME
-                + ", h." + HistoryColumns.KEY_FIXED
-                + ", h." + HistoryColumns.KEY_LAST_RUN_TIME
-                + ", h." + HistoryColumns.KEY_RUN_COUNT
-                + ", h." + HistoryColumns.KEY_WEIGHT
-        		+ " FROM " + APP_TABLE_NAME + " AS a"
-                + " LEFT JOIN " + HISTORY_TABLE_NAME + " AS h "
-                + " ON a."+ AppColumns.KEY_PACKAGE_NAME + "="
-                + "h."+HistoryColumns.KEY_PACKAGE_NAME
-                + " ORDER BY " 
-                + "h."+HistoryColumns.KEY_WEIGHT + " DESC, "
-                + "a."+AppColumns.KEY_FIRST_INSTALL_TIME + " DESC ";
-        Log.i(TAG, sql);
-        Cursor c = db.rawQuery(sql, null);
-                /*
-                db.query(APP_TABLE_NAME, null, null, null, null, null,
-                AppColumns.KEY_WEIGHT + " DESC ," +
-                AppColumns.KEY_FIRST_INSTALL_TIME + " DESC "
-                );
-                */
+        Log.i(TAG, SQL_GET_ALL_APP_INFO);
+        Cursor c = db.rawQuery(SQL_GET_ALL_APP_INFO, null);
         
         while (c.moveToNext()) {
             AppInfo bean = new AppInfo();

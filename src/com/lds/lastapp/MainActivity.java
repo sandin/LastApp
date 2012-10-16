@@ -27,6 +27,7 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.BaseAdapter;
+import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.SearchView;
@@ -48,6 +49,7 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
     private List<AppInfo> appInfoList; // 所有包信息
     private PackageManager pm;
 
+    private GridView gridView;
     private ListView listView;
     private ListAdapter listAdapter;
 
@@ -86,6 +88,10 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
         listAdapter = new ListAdapter(this);
         listView.setAdapter(listAdapter);
         listView.setOnItemClickListener(this);
+        
+        gridView = (GridView) findViewById(R.id.grid);
+        gridView.setAdapter(listAdapter);
+        gridView.setOnItemClickListener(this);
         
         actionBar = getActionBar();
         actionBar.setDisplayOptions(ActionBar.DISPLAY_SHOW_TITLE);
@@ -285,7 +291,7 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
         
         mSearchView = (SearchView) menu.findItem(R.id.search).getActionView();
         mSearchView.setIconifiedByDefault(false);
-        mSearchView.requestFocus();
+        //mSearchView.requestFocus();
         mSearchView.setQueryHint(getString(R.string.search_hit));
         mSearchView.setImeOptions(EditorInfo.IME_ACTION_GO);
         setupSearchView();
@@ -359,7 +365,7 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
             if (convertView == null) {
                 view = getLayoutInflater().inflate(R.layout.list_item, null);
                 Holder holder = new Holder();
-                holder.icon = (ImageView) view.findViewById(R.id.icon);
+                //holder.icon = (ImageView) view.findViewById(R.id.icon);
                 holder.text = (TextView) view.findViewById(R.id.text);
                 view.setTag(holder);
             } else {
@@ -371,7 +377,9 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
             holder.text.setText(item.getApplicationLabel());
             try {
                 Drawable drawable = pm.getApplicationIcon(item.packageName);
-                holder.icon.setImageDrawable(drawable);
+                //holder.icon.setImageDrawable(drawable);
+                drawable.setBounds( 0, 0, 100, 100 );
+                holder.text.setCompoundDrawables(null, drawable, null, null);
             } catch (NameNotFoundException e) {
                 e.printStackTrace();
             }
