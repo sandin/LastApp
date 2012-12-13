@@ -15,8 +15,11 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -26,6 +29,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
+import android.widget.AdapterView.OnItemLongClickListener;
 import android.widget.BaseAdapter;
 import android.widget.GridView;
 import android.widget.ImageView;
@@ -38,7 +42,7 @@ import android.widget.Toast;
 import com.lds.lastapp.db.LastAppDatabase;
 import com.lds.lastapp.model.AppInfo;
 
-public class MainActivity extends ListActivity implements OnItemClickListener {
+public class MainActivity extends ListActivity implements OnItemClickListener, OnItemLongClickListener {
     private static final String TAG = "MainActivity";
     
     private static final int MAX_DISPLAY_ITEM = 21; // 最大结果集，显示过多结果没有意义
@@ -92,6 +96,7 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
         gridView = (GridView) findViewById(R.id.grid);
         gridView.setAdapter(listAdapter);
         gridView.setOnItemClickListener(this);
+        gridView.setOnItemLongClickListener(this);
         
         actionBar = getActionBar();
         actionBar.setDisplayOptions(ActionBar.DISPLAY_SHOW_TITLE);
@@ -135,6 +140,49 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
         startActivity(intent);
         finish();
     }
+    
+    @Override
+    public boolean onItemLongClick(AdapterView<?> arg0, View arg1, int position,
+            long id) {
+        final AppInfo item = (AppInfo) listAdapter.getItem(position);
+        if (item == null) {
+            return false;
+        }
+        
+        /* uninstall package
+        Intent intent = new Intent(Intent.ACTION_DELETE, Uri.fromParts("package",
+                        item.getPackageName(),null));
+        startActivity(intent);
+        */
+        showInstalledAppDetails(this, item.getPackageName());
+        return true;
+    }
+    
+    private static final String SCHEME = "package";
+    private static final String APP_PKG_NAME_21 = "com.android.settings.ApplicationPkgName";
+    private static final String APP_PKG_NAME_22 = "pkg";
+    private static final String APP_DETAILS_PACKAGE_NAME = "com.android.settings";
+    private static final String APP_DETAILS_CLASS_NAME = "com.android.settings.InstalledAppDetails";
+
+    public static void showInstalledAppDetails(Context context, String packageName) {
+        Intent intent = new Intent();
+        final int apiLevel = Build.VERSION.SDK_INT;
+        if (apiLevel >= 9) { // above 2.3
+            intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            Uri uri = Uri.fromParts(SCHEME, packageName, null);
+            intent.setData(uri);
+        } else { // below 2.3
+            final String appPkgName = (apiLevel == 8 ? APP_PKG_NAME_22
+                    : APP_PKG_NAME_21);
+            intent.setAction(Intent.ACTION_VIEW);
+            intent.setClassName(APP_DETAILS_PACKAGE_NAME,
+                    APP_DETAILS_CLASS_NAME);
+            intent.putExtra(appPkgName, packageName);
+        }
+        context.startActivity(intent);
+    }
+
+    
     
     // TODO: 是否每次都需要刷新索引?
     private class SearchIndexTask extends AsyncTask<Void, Void, String> {
@@ -395,5 +443,6 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
         }
 
     }
+
 
 }

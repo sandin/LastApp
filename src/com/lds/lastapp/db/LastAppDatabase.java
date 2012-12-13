@@ -12,6 +12,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.provider.BaseColumns;
 import android.util.Log;
+import android.util.TimingLogger;
 
 import com.lds.lastapp.Utils;
 import com.lds.lastapp.model.AppInfo;
@@ -108,12 +109,16 @@ public class LastAppDatabase {
     }
     
     public int saveAppInfoList(Context context, List<PackageInfo> list, final PackageManager pm) {
+        TimingLogger timings = new TimingLogger(TAG, "saveAppInfoList");
+        
         Log.i(TAG, "Save App Info List. " + list.size());
         SQLiteDatabase db = getDb(true);
         db.delete(APP_TABLE_NAME, null, null); // 清空表
+        timings.addSplit("DELETE TABLE");
+        
         int count = 0;
         try {
-            //db.beginTransaction();
+            db.beginTransaction();
             
             Log.i(TAG, "list size: " + list.size());
             for (int i = 0, l = list.size(); i < l; i++) {
@@ -121,12 +126,7 @@ public class LastAppDatabase {
                 ContentValues v = new ContentValues();
                 String appLable = pm.getApplicationLabel(item.applicationInfo).toString();
                 v.put(AppColumns.KEY_APPLICATION_LABEL, appLable);
-                try {
-                    v.put(AppColumns.KEY_APPLICATION_LABEL_PINYIN, Utils.toPinyin(appLable));
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    v.put(AppColumns.KEY_APPLICATION_LABEL_PINYIN, "");
-                }
+                v.put(AppColumns.KEY_APPLICATION_LABEL_PINYIN, Utils.toPinyin(appLable));
                 v.put(AppColumns.KEY_FIRST_INSTALL_TIME, item.firstInstallTime);
                 v.put(AppColumns.KEY_LAST_UPDATE_TIME, item.lastUpdateTime);
                 v.put(AppColumns.KEY_PACKAGE_NAME, item.packageName);
@@ -142,11 +142,13 @@ public class LastAppDatabase {
                     Log.e(TAG, "insert fail. " + item.toString());
                 }
             }
-            //db.setTransactionSuccessful();
+            db.setTransactionSuccessful();
         } catch (Exception e) {
             e.printStackTrace();
-            //db.endTransaction();
         }
+        db.endTransaction();
+        timings.addSplit("SAVE ALL");
+        timings.dumpToLog();
         return count;
     }
     

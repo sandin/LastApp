@@ -24,8 +24,10 @@ public class Utils {
         for (int i = 0; i < arr.length; i++) {
             if (arr[i] > 128) {
                 try {
-                    pybf.append(PinyinHelper.toHanyuPinyinStringArray(arr[i],
-                            defaultFormat)[0]);
+                    String[] tmp = PinyinHelper.toHanyuPinyinStringArray(arr[i], defaultFormat);
+                    if (tmp != null && tmp.length > 0) {
+                        pybf.append(tmp[0]);
+                    }
                 } catch (BadHanyuPinyinOutputFormatCombination e) {
                     e.printStackTrace();
                 }
