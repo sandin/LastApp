@@ -107,19 +107,26 @@ public class LastAppDatabase {
         }
     }
     
-    public void saveAppInfoList(Context context, List<PackageInfo> list, final PackageManager pm) {
+    public int saveAppInfoList(Context context, List<PackageInfo> list, final PackageManager pm) {
         Log.i(TAG, "Save App Info List. " + list.size());
         SQLiteDatabase db = getDb(true);
         db.delete(APP_TABLE_NAME, null, null); // 清空表
-        
+        int count = 0;
         try {
             //db.beginTransaction();
             
-            for (PackageInfo item : list) {
+            Log.i(TAG, "list size: " + list.size());
+            for (int i = 0, l = list.size(); i < l; i++) {
+                PackageInfo item = list.get(i);
                 ContentValues v = new ContentValues();
                 String appLable = pm.getApplicationLabel(item.applicationInfo).toString();
                 v.put(AppColumns.KEY_APPLICATION_LABEL, appLable);
-                v.put(AppColumns.KEY_APPLICATION_LABEL_PINYIN, Utils.toPinyin(appLable));
+                try {
+                    v.put(AppColumns.KEY_APPLICATION_LABEL_PINYIN, Utils.toPinyin(appLable));
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    v.put(AppColumns.KEY_APPLICATION_LABEL_PINYIN, "");
+                }
                 v.put(AppColumns.KEY_FIRST_INSTALL_TIME, item.firstInstallTime);
                 v.put(AppColumns.KEY_LAST_UPDATE_TIME, item.lastUpdateTime);
                 v.put(AppColumns.KEY_PACKAGE_NAME, item.packageName);
@@ -130,6 +137,7 @@ public class LastAppDatabase {
                 long rowId = db.insert(APP_TABLE_NAME, null, v);
                 if (rowId > 0) {
                     //Log.d(TAG, "insert the appInfo: " + item.toString());
+                    count++;
                 } else {
                     Log.e(TAG, "insert fail. " + item.toString());
                 }
@@ -139,6 +147,7 @@ public class LastAppDatabase {
             e.printStackTrace();
             //db.endTransaction();
         }
+        return count;
     }
     
     public boolean saveOrUpdateHistory(String packageName) {

@@ -101,4 +101,14 @@ public class AppInfo {
     public void setFixed(boolean fixed) {
         this.fixed = fixed;
     }
+
+    @Override
+    public String toString() {
+        return "AppInfo [id=" + id + ", applicationLabel=" + applicationLabel
+                + ", packageName=" + packageName + ", firstInstallTime="
+                + firstInstallTime + ", lastUpdateTime=" + lastUpdateTime
+                + ", applicationLabelPinYin=" + applicationLabelPinYin
+                + ", weight=" + weight + ", runCount=" + runCount
+                + ", lastRunTime=" + lastRunTime + ", fixed=" + fixed + "]";
+    }
 }

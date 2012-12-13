@@ -41,7 +41,7 @@ import com.lds.lastapp.model.AppInfo;
 public class MainActivity extends ListActivity implements OnItemClickListener {
     private static final String TAG = "MainActivity";
     
-    private static final int MAX_DISPLAY_ITEM = 20; // 最大结果集，显示过多结果没有意义
+    private static final int MAX_DISPLAY_ITEM = 21; // 最大结果集，显示过多结果没有意义
     
     private static final String SP_KEY_SEARCH_INDEX = "search_index";
     private SharedPreferences sp;
@@ -249,12 +249,14 @@ public class MainActivity extends ListActivity implements OnItemClickListener {
             LastAppDatabase database = LastAppDatabase.getInstance(getApplicationContext());
             
             list = database.getAllAppInfo(getApplicationContext());
+            Log.i(TAG, "Got list From cache: " + list);
             this.publishProgress(GET_CACHE);
             
             List<PackageInfo> packageInfoList = pm.getInstalledPackages(0);
             database.saveAppInfoList(getApplicationContext(), packageInfoList, pm);
             
             list = database.getAllAppInfo(getApplicationContext());
+            Log.i(TAG, "Got list From Phone: " + list);
             this.publishProgress(GET_REALTIME);
                 
             return list;
